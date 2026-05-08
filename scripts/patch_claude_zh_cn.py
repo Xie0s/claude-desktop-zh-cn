@@ -395,6 +395,28 @@ def calculate_file_integrity(data: bytes) -> dict[str, Any]:
     }
 
 
+def find_custom3p_validation_toggle(content: bytes, expr: bytes) -> re.Match[bytes] | None:
+    pattern = re.compile(
+        rb"const ([A-Za-z_$][A-Za-z0-9_$]*)="
+        + re.escape(expr)
+        + rb"\|\|!1,([A-Za-z_$][A-Za-z0-9_$]*)="
+    )
+    matches: list[re.Match[bytes]] = []
+    for match in pattern.finditer(content):
+        flag_name = match.group(1)
+        validation_window = content[match.start() : match.start() + 2500]
+        if (
+            b"if(!" + flag_name + b")return{ok:!0}" in validation_window
+            and b"expected a gateway model route referencing an Anthropic model" in validation_window
+            and b"Bedrock model" in validation_window
+        ):
+            matches.append(match)
+
+    if len(matches) > 1:
+        raise SystemExit("Could not patch custom 3P model validation: multiple matching toggles found.")
+    return matches[0] if matches else None
+
+
 def update_electron_asar_integrity(app: Path, header_string: str) -> None:
     info_plist = app / "Contents/Info.plist"
     require_file(info_plist)
@@ -422,10 +444,6 @@ def patch_custom3p_model_validation(app: Path) -> None:
     old_expr = b'process.env.NODE_ENV!=="production"'
     new_expr = b"false"
     replacement = new_expr + b" " * (len(old_expr) - len(new_expr))
-    anchor = b"const Hte=" + old_expr + b"||!1,eRt="
-    patched = b"const Hte=" + replacement + b"||!1,eRt="
-    if len(anchor) != len(patched):
-        raise SystemExit("Internal patch error: custom 3P validation replacement changed length.")
 
     data = bytearray(path.read_bytes())
     header_size, _header_string, header = read_asar_header(data, path)
@@ -437,13 +455,30 @@ def patch_custom3p_model_validation(app: Path) -> None:
         raise SystemExit(f"Unsupported app.asar file bounds for {ASAR_PATCH_TARGET}.")
 
     content = bytes(data[content_offset:content_end])
-    count = content.count(anchor)
-    if count != 1:
+    match = find_custom3p_validation_toggle(content, old_expr)
+    if match is None:
+        patched_match = find_custom3p_validation_toggle(content, replacement)
+        if patched_match is not None:
+            print("Custom 3P model-name validation already patched in app.asar")
+            return
         raise SystemExit(
             "Could not patch custom 3P model validation. Claude bundle format may have changed."
         )
 
-    patched_content = content.replace(anchor, patched, 1)
+    anchor = match.group(0)
+    patched = (
+        b"const "
+        + match.group(1)
+        + b"="
+        + replacement
+        + b"||!1,"
+        + match.group(2)
+        + b"="
+    )
+    if len(anchor) != len(patched):
+        raise SystemExit("Internal patch error: custom 3P validation replacement changed length.")
+
+    patched_content = content[: match.start()] + patched + content[match.end() :]
     if len(patched_content) != len(content):
         raise SystemExit("Internal patch error: app.asar length changed during custom 3P patch.")
     data[content_offset:content_end] = patched_content
@@ -516,6 +551,8 @@ def install_statsig_locale(app: Path) -> None:
 def sign_path(path: Path, entitlements_dir: Path) -> None:
     entitlements = load_entitlements(path)
     if entitlements:
+        entitlements.pop("com.apple.application-identifier", None)
+        entitlements.pop("com.apple.developer.team-identifier", None)
         # Ad-hoc signatures do not have a real Team ID. Under hardened runtime,
         # Electron's main process otherwise fails library validation when it loads
         # bundled frameworks, even when the whole bundle is signed consistently.

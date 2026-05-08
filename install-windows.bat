@@ -6,7 +6,15 @@ if "%CLAUDE_ZH_ELEVATED%"=="1" goto elevated
 echo Requesting administrator privileges...
 set "CLAUDE_ZH_DIR=%~dp0"
 set "CLAUDE_ZH_BAT=%~nx0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$q=[char]34; $dir=$env:CLAUDE_ZH_DIR; $bat=$env:CLAUDE_ZH_BAT; $cmd='/k set ' + $q + 'CLAUDE_ZH_ELEVATED=1' + $q + ' && pushd ' + $q + $dir + $q + ' && call ' + $q + $bat + $q; Start-Process -FilePath 'cmd.exe' -ArgumentList $cmd -Verb RunAs"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $q=[char]34; $dir=$env:CLAUDE_ZH_DIR; $bat=$env:CLAUDE_ZH_BAT; $cmd='/k set ' + $q + 'CLAUDE_ZH_ELEVATED=1' + $q + ' && pushd ' + $q + $dir + $q + ' && call ' + $q + $bat + $q; Start-Process -FilePath 'cmd.exe' -ArgumentList $cmd -Verb RunAs -ErrorAction Stop; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 }"
+if errorlevel 1 (
+    echo.
+    echo Failed to request administrator privileges.
+    echo If you cancelled UAC, please run this script again.
+    echo.
+    pause
+    exit /b 1
+)
 exit /b
 
 :elevated

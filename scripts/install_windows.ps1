@@ -415,6 +415,38 @@ function Find-BytePattern {
     return $matches
 }
 
+function Find-Custom3PValidationToggle {
+    param(
+        [byte[]]$Content,
+        [string]$ExprText
+    )
+
+    $contentText = [System.Text.Encoding]::ASCII.GetString($Content)
+    $pattern = 'const ([A-Za-z_$][A-Za-z0-9_$]*)=' + [regex]::Escape($ExprText) + '\|\|!1,([A-Za-z_$][A-Za-z0-9_$]*)='
+    $validMatches = New-Object System.Collections.Generic.List[object]
+
+    foreach ($match in [regex]::Matches($contentText, $pattern)) {
+        $flagName = $match.Groups[1].Value
+        $windowLength = [Math]::Min(2500, $contentText.Length - $match.Index)
+        $validationWindow = $contentText.Substring($match.Index, $windowLength)
+        if (
+            $validationWindow.Contains(('if(!' + $flagName + ')return{ok:!0}')) -and
+            $validationWindow.Contains('expected a gateway model route referencing an Anthropic model') -and
+            $validationWindow.Contains('Bedrock model')
+        ) {
+            $validMatches.Add($match)
+        }
+    }
+
+    if ($validMatches.Count -gt 1) {
+        throw "Could not patch custom 3P model validation: multiple matching toggles found."
+    }
+    if ($validMatches.Count -eq 1) {
+        return $validMatches[0]
+    }
+    return $null
+}
+
 function Get-Sha256Hex {
     param([byte[]]$Bytes)
 
@@ -582,7 +614,7 @@ function Patch-HardcodedFrontendStrings {
         @('"Recents"', '"最近使用"'),
         @('"View all"', '"查看全部"'),
         @('"Search"', '"搜索"'),
-        @('"Code"', '"代码"'),
+        @('"代码"', '"Code"'),
         @('"Legacy Model"', '"旧版模型"'),
         @('"Drag to pin"', '"拖到此处固定"'),
         @('"Drop here"', '"拖到此处"'),
@@ -686,11 +718,6 @@ function Patch-Custom3PModelValidation {
 
     $oldExpr = [System.Text.Encoding]::ASCII.GetBytes('process.env.NODE_ENV!=="production"')
     $newExprText = "false".PadRight($oldExpr.Length, " ")
-    $anchor = [System.Text.Encoding]::ASCII.GetBytes('const Hte=process.env.NODE_ENV!=="production"||!1,eRt=')
-    $patchedAnchor = [System.Text.Encoding]::ASCII.GetBytes(('const Hte=' + $newExprText + '||!1,eRt='))
-    if ($anchor.Length -ne $patchedAnchor.Length) {
-        throw "Internal patch error: custom 3P validation replacement changed length."
-    }
 
     $data = [System.IO.File]::ReadAllBytes($asarPath)
     $parsed = Read-AsarHeader $data $asarPath
@@ -707,21 +734,27 @@ function Patch-Custom3PModelValidation {
 
     $content = [byte[]]::new([int]$contentSize)
     [System.Array]::Copy($data, [int]$contentOffset, $content, 0, [int]$contentSize)
-    $matches = Find-BytePattern $content $anchor
-    if ($matches.Count -eq 0) {
-        $alreadyPatched = (Find-BytePattern $content $patchedAnchor).Count -gt 0
-        if ($alreadyPatched) {
+    $match = Find-Custom3PValidationToggle $content 'process.env.NODE_ENV!=="production"'
+    if ($null -eq $match) {
+        $patchedMatch = Find-Custom3PValidationToggle $content $newExprText
+        if ($null -ne $patchedMatch) {
             Write-Host "  custom 3P model-name validation already patched" -ForegroundColor Green
             Sync-ClaudeExeAsarIntegrity $ResourcesPath
             return
         }
-    }
-    if ($matches.Count -ne 1) {
         throw "Could not patch custom 3P model validation. Claude bundle format may have changed."
     }
 
     Backup-ModifiedFile $ResourcesPath $asarPath
-    $matchOffset = $matches[0]
+    $anchorText = $match.Value
+    $patchedAnchorText = 'const ' + $match.Groups[1].Value + '=' + $newExprText + '||!1,' + $match.Groups[2].Value + '='
+    $anchor = [System.Text.Encoding]::ASCII.GetBytes($anchorText)
+    $patchedAnchor = [System.Text.Encoding]::ASCII.GetBytes($patchedAnchorText)
+    if ($anchor.Length -ne $patchedAnchor.Length) {
+        throw "Internal patch error: custom 3P validation replacement changed length."
+    }
+
+    $matchOffset = $match.Index
     [System.Array]::Copy($patchedAnchor, 0, $content, $matchOffset, $patchedAnchor.Length)
     [System.Array]::Copy($content, 0, $data, [int]$contentOffset, $content.Length)
 
@@ -788,12 +821,17 @@ function Remove-LanguageFiles {
     }
 }
 
-function Restart-Claude {
-    param([string]$ClaudePath)
-
+function Stop-ClaudeProcesses {
     Stop-Process -Name "Claude" -Force -ErrorAction SilentlyContinue
     Stop-Process -Name "claude" -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
+    Write-Host "  stopped Claude Desktop if it was running" -ForegroundColor Green
+}
+
+function Restart-Claude {
+    param([string]$ClaudePath)
+
+    Stop-ClaudeProcesses
 
     $exeCandidates = @(
         (Join-Path $ClaudePath "app\Claude.exe"),
@@ -822,6 +860,9 @@ function Install-WindowsLanguagePack {
     $resourcesPath = $paths["Resources"]
     Write-Host "  app: $claudePath" -ForegroundColor Green
     Write-Host "  resources: $resourcesPath" -ForegroundColor Green
+
+    Write-Step "关闭 Claude Desktop"
+    Stop-ClaudeProcesses
 
     Write-Step "[3/8] 准备写入权限"
     Enable-WriteAccess $resourcesPath
@@ -852,7 +893,11 @@ function Uninstall-WindowsLanguagePack {
     Write-Host "=== Claude Desktop Windows 简体中文补丁卸载 ===" -ForegroundColor Cyan
 
     $paths = Get-ClaudeResourcesPath
+    $claudePath = $paths["App"]
     $resourcesPath = $paths["Resources"]
+
+    Write-Step "关闭 Claude Desktop"
+    Stop-ClaudeProcesses
 
     Write-Step "[1/4] 恢复前端 bundle 和 app.asar"
     Restore-LatestBackup $resourcesPath
