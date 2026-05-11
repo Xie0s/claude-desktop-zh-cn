@@ -308,6 +308,7 @@ function Get-LanguageResources {
     $resourcesDir = Join-Path $projectDir "resources"
     $resources = @{
         Frontend = Join-Path $resourcesDir "frontend-$Lang.json"
+        FrontendHardcoded = Join-Path $resourcesDir "frontend-hardcoded-$Lang.json"
         Desktop = Join-Path $resourcesDir "desktop-$Lang.json"
         Statsig = Join-Path $resourcesDir "statsig-$Lang.json"
     }
@@ -720,8 +721,30 @@ function Unregister-Language {
     }
 }
 
+function Get-FrontendHardcodedReplacements {
+    param([string]$Language)
+
+    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $projectDir = Split-Path -Parent $scriptDir
+    $path = Join-Path $projectDir "resources\frontend-hardcoded-$Language.json"
+    Require-File $path
+
+    $items = Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $replacements = @()
+    foreach ($item in $items) {
+        if ($item.Count -ne 2) {
+            throw "无效的前端硬编码替换项: $path"
+        }
+        $replacements += ,@([string]$item[0], [string]$item[1])
+    }
+    return $replacements
+}
+
 function Patch-HardcodedFrontendStrings {
-    param([string]$ResourcesPath)
+    param(
+        [string]$ResourcesPath,
+        [string]$Language
+    )
 
     $assetsDir = Join-Path $ResourcesPath "ion-dist\assets\v1"
     $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "*.js") -ErrorAction SilentlyContinue)
@@ -968,6 +991,7 @@ function Patch-HardcodedFrontendStrings {
         @("`"What’s up next?`"", '"接下来做什么？"'),
         @('"Let''s knock something off your list"', '"先把清单上的一件事做完"')
     )
+    $replacements += Get-FrontendHardcodedReplacements $Language
 
     $patchedFiles = 0
     $patchedStrings = 0
@@ -1242,7 +1266,7 @@ function Install-WindowsLanguagePack {
     Register-Language $resourcesPath $LanguageCode
 
     Write-Step "[6/8] 汉化硬编码界面文本"
-    Patch-HardcodedFrontendStrings $resourcesPath
+    Patch-HardcodedFrontendStrings $resourcesPath $LanguageCode
     Patch-LanguageDisplayNames $resourcesPath
     Patch-HardcodedMainProcessMenuLabels $resourcesPath
 

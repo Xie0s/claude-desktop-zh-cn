@@ -55,6 +55,7 @@ def get_language_config(lang_code: str) -> dict[str, Any]:
     return {
         "lang_code": lang_code,
         "frontend_translation": RESOURCES / f"frontend-{lang_code}.json",
+        "frontend_hardcoded": RESOURCES / f"frontend-hardcoded-{lang_code}.json",
         "desktop_translation": RESOURCES / f"desktop-{lang_code}.json",
         "localizable_strings": RESOURCES / f"Localizable-{lang_code}.strings" if (RESOURCES / f"Localizable-{lang_code}.strings").exists() else RESOURCES / "Localizable.strings",
         "statsig_translation": RESOURCES / f"statsig-{lang_code}.json",
@@ -172,7 +173,27 @@ def patch_language_display_names(app: Path) -> None:
         print(f"Patched language display names: {path.name}")
 
 
-def patch_hardcoded_frontend_strings(app: Path) -> None:
+def load_frontend_hardcoded_replacements(lang_code: str) -> list[tuple[str, str]]:
+    path = get_language_config(lang_code)["frontend_hardcoded"]
+    require_file(path)
+    data = load_json(path)
+    if not isinstance(data, list):
+        raise SystemExit(f"Unsupported hardcoded frontend replacement JSON shape: {path}")
+
+    replacements: list[tuple[str, str]] = []
+    for item in data:
+        if not (
+            isinstance(item, list)
+            and len(item) == 2
+            and isinstance(item[0], str)
+            and isinstance(item[1], str)
+        ):
+            raise SystemExit(f"Invalid hardcoded frontend replacement entry in {path}: {item!r}")
+        replacements.append((item[0], item[1]))
+    return replacements
+
+
+def patch_hardcoded_frontend_strings(app: Path, lang_code: str) -> None:
     assets_dir = app / FRONTEND_ASSETS_REL
     replacements = {
         '"New task"': '"新建任务"',
@@ -413,6 +434,7 @@ def patch_hardcoded_frontend_strings(app: Path) -> None:
         '"aria-label":"Expand sidebar"': '"aria-label":"展开侧边栏"',
         '"aria-label":"Search"': '"aria-label":"搜索"',
     }
+    replacement_items = list(replacements.items()) + load_frontend_hardcoded_replacements(lang_code)
     patched_files = 0
     patched_strings = 0
 
@@ -420,7 +442,7 @@ def patch_hardcoded_frontend_strings(app: Path) -> None:
         text = path.read_text(encoding="utf-8")
         patched = text
         count = 0
-        for source, target in replacements.items():
+        for source, target in replacement_items:
             occurrences = patched.count(source)
             if occurrences:
                 patched = patched.replace(source, target)
@@ -942,6 +964,7 @@ def main() -> int:
     label = config["label"]
 
     require_file(config["frontend_translation"])
+    require_file(config["frontend_hardcoded"])
     require_file(config["desktop_translation"])
     require_file(config["localizable_strings"])
     if not args.app.exists():
@@ -957,7 +980,7 @@ def main() -> int:
 
     copy_app(args.app, patched_app)
     patch_language_whitelist(patched_app, lang_code)
-    patch_hardcoded_frontend_strings(patched_app)
+    patch_hardcoded_frontend_strings(patched_app, lang_code)
     patch_language_display_names(patched_app)
     patch_hardcoded_main_process_menu_labels(patched_app)
     patch_custom3p_model_validation(patched_app)

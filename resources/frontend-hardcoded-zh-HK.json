@@ -1,0 +1,13 @@
+[
+  ["title:\"Projects\"", "title:\"項目\""],
+  ["label:\"Projects\"", "label:\"項目\""],
+  ["children:\"Projects\"", "children:\"項目\""],
+  ["=\"New project\"", "=\"新項目\""],
+  ["placeholder:\"Search projects\"", "placeholder:\"搜尋項目\""],
+  ["placeholder:\"Search projects...\"", "placeholder:\"搜尋項目\""],
+  ["placeholder:\"Search projects…\"", "placeholder:\"搜尋項目\""],
+  ["\"aria-label\":\"Search projects\"", "\"aria-label\":\"搜尋項目\""],
+  ["recent:\"Recent\"", "recent:\"最近\""],
+  ["created:\"Created\"", "created:\"已建立\""],
+  ["alphabetical:\"Alphabetical\"", "alphabetical:\"按字母順序\""]
+]

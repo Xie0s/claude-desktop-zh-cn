@@ -1,0 +1,13 @@
+[
+  ["title:\"Projects\"", "title:\"项目\""],
+  ["label:\"Projects\"", "label:\"项目\""],
+  ["children:\"Projects\"", "children:\"项目\""],
+  ["=\"New project\"", "=\"新项目\""],
+  ["placeholder:\"Search projects\"", "placeholder:\"搜索项目\""],
+  ["placeholder:\"Search projects...\"", "placeholder:\"搜索项目\""],
+  ["placeholder:\"Search projects…\"", "placeholder:\"搜索项目\""],
+  ["\"aria-label\":\"Search projects\"", "\"aria-label\":\"搜索项目\""],
+  ["recent:\"Recent\"", "recent:\"最近\""],
+  ["created:\"Created\"", "created:\"已创建\""],
+  ["alphabetical:\"Alphabetical\"", "alphabetical:\"按字母顺序\""]
+]
