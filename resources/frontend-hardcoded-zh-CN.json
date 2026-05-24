@@ -288,6 +288,22 @@
     "cancelText:y=\"取消\""
   ],
   [
+    "cancelText:l=\"Cancel\"",
+    "cancelText:l=\"取消\""
+  ],
+  [
+    "title:F?\"Archive selected\"",
+    "title:F?\"归档所选\""
+  ],
+  [
+    "message:F?`Archive ${j.items.length} ${1===j.items.length?b.noun:b.nouns}? You can find ${1===j.items.length?\"it\":\"them\"} in the Archived tab.`",
+    "message:F?`归档 ${j.items.length} ${1===j.items.length?b.noun:b.nouns}？你可以在“已归档”标签页中找到${1===j.items.length?\"它\":\"它们\"}。`"
+  ],
+  [
+    "confirmText:F?\"Archive\":\"Delete\"",
+    "confirmText:F?\"归档\":\"Delete\""
+  ],
+  [
     "children:\"All\"",
     "children:\"全部\""
   ],
