@@ -1280,12 +1280,32 @@ function Test-PlainUiTextReplacement {
     return $true
 }
 
+function Test-StructuralJsReplacement {
+    param([string]$Source)
+
+    $structuralStrings = @(
+        "hour", "hours",
+        "minute", "minutes",
+        "second", "seconds",
+        "day", "days",
+        "week", "weeks",
+        "month", "months",
+        "year", "years"
+    )
+    $structuralLiterals = @('"Search"')
+    return ($structuralStrings -contains $Source) -or ($structuralLiterals -contains $Source)
+}
+
 function Replace-FrontendHardcodedText {
     param(
         [string]$Text,
         [string]$Source,
         [string]$Target
     )
+
+    if (Test-StructuralJsReplacement $Source) {
+        return @{ Text = $Text; Count = 0 }
+    }
 
     if (-not (Test-PlainUiTextReplacement $Source)) {
         $occurrences = 0

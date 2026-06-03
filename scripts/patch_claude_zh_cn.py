@@ -68,6 +68,9 @@ STRUCTURAL_JS_STRING_REPLACEMENTS = {
     "year",
     "years",
 }
+STRUCTURAL_JS_LITERAL_REPLACEMENTS = {
+    '"Search"',
+}
 
 
 def log(message: str) -> None:
@@ -234,7 +237,7 @@ def is_plain_ui_text_replacement(source: str) -> bool:
 
 
 def replace_frontend_hardcoded_text(text: str, source: str, target: str) -> tuple[str, int]:
-    if source in STRUCTURAL_JS_STRING_REPLACEMENTS:
+    if source in STRUCTURAL_JS_STRING_REPLACEMENTS or source in STRUCTURAL_JS_LITERAL_REPLACEMENTS:
         return text, 0
 
     if not is_plain_ui_text_replacement(source):
