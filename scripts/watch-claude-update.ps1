@@ -14,6 +14,13 @@ function Write-WatcherLog {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$timestamp] $Message"
     try {
+        # 日志轮转：超过 1MB 时截断，保留最后 100 行
+        if ((Test-Path $logFile) -and (Get-Item $logFile).Length -gt 1MB) {
+            $tail = Get-Content $logFile -Tail 100 -ErrorAction SilentlyContinue
+            if ($tail) {
+                Set-Content -Path $logFile -Value $tail -Encoding UTF8 -ErrorAction SilentlyContinue
+            }
+        }
         Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
     }
     catch {}
@@ -121,12 +128,28 @@ if (-not (Test-Path $patcherScript)) {
 }
 
 $taskName = "ClaudeDesktopZhCn-ReapplyPatch"
-$stdoutLog = Join-Path $dataDir "reapply-stdout.log"
-$stderrLog = Join-Path $dataDir "reapply-stderr.log"
 
 try {
     # 清理旧的一次性任务
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+
+    # 等待残留的 install_windows.ps1 进程完成（避免并发写入 app.asar）
+    $deadline = (Get-Date).AddMinutes(5)
+    while ((Get-Date) -lt $deadline) {
+        $reapplyRunning = $false
+        foreach ($p in Get-Process -Name "powershell" -ErrorAction SilentlyContinue) {
+            try {
+                $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$($p.Id)" -ErrorAction SilentlyContinue).CommandLine
+                if ($cmdLine -and $cmdLine -match "install_windows\.ps1") {
+                    $reapplyRunning = $true
+                    break
+                }
+            } catch {}
+        }
+        if (-not $reapplyRunning) { break }
+        Write-WatcherLog "等待残留的安装进程完成..."
+        Start-Sleep -Seconds 10
+    }
 
     $argumentList = "-NoProfile -ExecutionPolicy Bypass -File `"$patcherScript`" -PatchMode `"$($recorded.patchMode)`" -Language `"$($recorded.language)`" -Action install"
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argumentList

@@ -2326,8 +2326,10 @@ function Remove-LanguageFiles {
 
     foreach ($target in $targets) {
         Remove-Item $target -Force -ErrorAction SilentlyContinue
-        if (Test-Path $target) {
+        if (-not (Test-Path $target)) {
             Write-Host "  removed: $target" -ForegroundColor Green
+        } else {
+            Write-Host "  [警告] 未能删除: $target" -ForegroundColor DarkYellow
         }
     }
 }
@@ -2353,11 +2355,11 @@ function Stop-ClaudeProcessesGracefully {
         return $true
     }
 
-    # 第一层：发送 WM_CLOSE 消息（不带 /F），允许 Electron 执行 app.quit() 和数据库 flush
+    # 第一层：发送 WM_CLOSE 消息（/T 通知子进程，不带 /F），允许 Electron 执行 app.quit() 和数据库 flush
     foreach ($proc in $procs) {
         Write-Host "  正在请求 Claude Desktop 优雅退出 (PID $($proc.Id))..." -ForegroundColor DarkGray
         try {
-            $null = & taskkill /PID $proc.Id 2>&1
+            $null = & taskkill /PID $proc.Id /T 2>&1
         } catch {
             # taskkill 失败，继续等待超时后强制终止
         }
@@ -2552,6 +2554,18 @@ function Unregister-UpdateWatcher {
 
 function Install-WindowsLanguagePack {
     $label = Get-LanguageLabel $LanguageCode
+
+    # 单实例互斥锁：防止多个安装进程并发写入 app.asar
+    $mutex = New-Object System.Threading.Mutex($false, "Global\ClaudeDesktopZhCn-Installer")
+    try {
+        if (-not $mutex.WaitOne(0)) {
+            Write-Host "  [错误] 另一个安装进程正在运行，请等待其完成后再试。" -ForegroundColor Red
+            return
+        }
+    } catch [System.Threading.AbandonedMutexException] {
+        # 上一个进程异常退出，锁已释放，继续执行
+    }
+
     Write-Host "=== Claude Desktop Windows $label 补丁 ===" -ForegroundColor Cyan
 
     try {
@@ -2631,12 +2645,22 @@ function Install-WindowsLanguagePack {
 
         Write-Host ""
         Write-Host "安装完成。如果界面未立即切换，请在 Language 中选择 $label。" -ForegroundColor Green
+        Write-Host "  已注册更新守护（计划任务 $script:WatcherTaskName，每 30 分钟检测 Claude 更新并自动重新应用补丁）。" -ForegroundColor DarkGray
+        Write-Host "  卸载时会自动移除该守护。" -ForegroundColor DarkGray
     }
     catch {
+        Write-Host ""
+        Write-Host "安装过程中出现错误，Claude Desktop 可能处于不完整状态。" -ForegroundColor Red
+        Write-Host "  建议运行卸载命令恢复原始状态：install-windows.bat → 选择卸载。" -ForegroundColor DarkYellow
+        Write-Host "  详细日志: $script:InstallLogPath" -ForegroundColor DarkGray
         if ($script:DetectedMultipleClaudeInstalls) {
             Write-MultipleClaudeFailureHint
         }
         throw
+    }
+    finally {
+        $mutex.ReleaseMutex()
+        $mutex.Dispose()
     }
 }
 
@@ -2658,27 +2682,35 @@ function Uninstall-WindowsLanguagePack {
     Stop-ClaudeProcesses
     Remove-LegacyAppxForkArtifacts
 
-    Write-Step "[1/6] 移除更新守护"
+    Write-Step "[1/5] 移除更新守护"
     Unregister-UpdateWatcher
     if ($script:PatchedVersionDir) {
-        $versionFile = Join-Path $script:PatchedVersionDir "patched-version.json"
-        if (Test-Path $versionFile) {
-            Remove-Item $versionFile -Force -ErrorAction SilentlyContinue
-            Write-Host "  已删除补丁版本记录" -ForegroundColor Green
+        # 清理版本记录和日志文件
+        @("patched-version.json", "update-watcher.log", "reapply-stdout.log", "reapply-stderr.log") |
+            ForEach-Object {
+                $f = Join-Path $script:PatchedVersionDir $_
+                if (Test-Path $f) {
+                    Remove-Item $f -Force -ErrorAction SilentlyContinue
+                }
+            }
+        Write-Host "  已清理补丁版本记录和日志" -ForegroundColor Green
+        # 如果数据目录为空则删除
+        if ((Get-ChildItem $script:PatchedVersionDir -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+            Remove-Item $script:PatchedVersionDir -Force -ErrorAction SilentlyContinue
         }
     }
 
-    Write-Step "[2/6] 恢复前端 bundle 和 app.asar"
+    Write-Step "[2/5] 恢复前端 bundle 和 app.asar"
     Restore-LatestBackup $resourcesPath
     Sync-ClaudeExeAsarIntegrity $resourcesPath
 
-    Write-Step "[3/6] 删除中文资源"
+    Write-Step "[3/5] 删除中文资源"
     Remove-LanguageFiles $resourcesPath
 
-    Write-Step "[4/6] 移除 zh-CN 语言注册"
+    Write-Step "[4/5] 移除 zh-CN 语言注册"
     Unregister-Language $resourcesPath
 
-    Write-Step "[5/6] 恢复用户语言配置"
+    Write-Step "[5/5] 恢复用户语言配置"
     Set-ClaudeLocale "en-US"
 
     Write-Host ""
