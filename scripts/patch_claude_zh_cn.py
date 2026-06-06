@@ -560,6 +560,8 @@ def build_online_dom_translation_script(lang_code: str, mapping: dict[str, str])
         '[/^Are you sure you want to delete (\\d+) chats\\? This cannot be undone\\.$/,"你确定要删除 $1 个聊天吗？此操作无法撤消。"],'
         '[/^Are you sure you want to permanently delete this chat\\? This cannot be undone\\.$/,"你确定要永久删除此聊天吗？此操作无法撤消。"],'
         '[/^Are you sure you want to permanently delete these chats\\? This cannot be undone\\.$/,"你确定要永久删除这些聊天吗？此操作无法撤消。"],'
+        '[/^Archive (\\d+) task\\? You can find it in the Archived tab\\.$/,"要归档 $1 个任务吗？你可以在“已归档”标签页中找到它。"],'
+        '[/^Archive (\\d+) tasks\\? You can find them in the Archived tab\\.$/,"要归档 $1 个任务吗？你可以在“已归档”标签页中找到它们。"],'
         f'{dynamic_rules}];'
         'const R=s=>{const n=N(s);if(M[n])return M[n];for(const [r,t] of G){const m=n.match(r);'
         'if(m)return t.replace("$1",m[1])}};'
@@ -571,6 +573,11 @@ def build_online_dom_translation_script(lang_code: str, mapping: dict[str, str])
         "const p=n.parentElement;if(!p||X.has(p.tagName)||p.closest('[contenteditable]')||!R(n.nodeValue))return NodeFilter.FILTER_REJECT;"
         "return NodeFilter.FILTER_ACCEPT}});"
         "let n;while(n=w.nextNode()){const v=R(n.nodeValue);if(v)n.nodeValue=v}"
+        'document.querySelectorAll("[role=dialog] p,[role=dialog] div,[role=dialog] span").forEach(e=>{try{'
+        'if(e.closest("button,[contenteditable]"))return;'
+        'const t=R(e.textContent);'
+        'if(t&&N(e.textContent)!==N(t))e.textContent=t'
+        '}catch{}});'
         'document.querySelectorAll("[aria-label],[title],[placeholder],input,textarea").forEach(e=>{'
         '["aria-label","title","placeholder","value"].forEach(a=>{'
         'try{if(a==="value"&&!(e.matches("input[type=button],input[type=submit]")))return;'

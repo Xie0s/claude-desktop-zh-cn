@@ -1192,6 +1192,10 @@
     "vi={local:\"本地\",remote:\"云端\",bridge:\"远程控制\"}"
   ],
   [
+    "CR={local:\"Local\",remote:\"Cloud\",bridge:\"Remote Control\",slack:\"Slack\"}",
+    "CR={local:\"本地\",remote:\"云端\",bridge:\"远程控制\",slack:\"Slack\"}"
+  ],
+  [
     "xYt={nextRun:\"Next run\",name:\"Name\"}",
     "xYt={nextRun:\"下次执行\",name:\"任务名称\"}"
   ],
@@ -1226,6 +1230,14 @@
   [
     "children:\"Run tasks on a schedule or whenever you need them. Type /schedule in any existing task to set one up.\"",
     "children:\"按计划运行任务，或在需要时运行任务。在任意现有任务中输入 /schedule 即可设置。\""
+  ],
+  [
+    "\"Run tasks on a schedule or whenever you need them.\"",
+    "\"按计划或在需要时运行任务。\""
+  ],
+  [
+    "\"Run tasks on a schedule or whenever you need them. Type /schedule in any existing task to set one up.\"",
+    "\"按计划运行任务，或在需要时运行任务。在任意现有任务中输入 /schedule 即可设置。\""
   ],
   [
     "label:\"Create with Claude\"",
@@ -1538,6 +1550,10 @@
   [
     "Archive 1 task? You can find it in the Archived tab.",
     "要归档 1 个任务吗？你可以在“已归档”标签页中找到它。"
+  ],
+  [
+    "defaultMessage:\"All environments\",id:\"SBWkijOQlK\"",
+    "defaultMessage:\"所有环境\",id:\"SBWkijOQlK\""
   ],
   [
     "message:F?`Archive ${j.items.length} ${1===j.items.length?y.noun:y.nouns}? You can find ${1===j.items.length?\"it\":\"them\"} in the Archived tab.`",
